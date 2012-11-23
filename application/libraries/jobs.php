@@ -7,7 +7,6 @@ if (!defined('BASEPATH'))
  * Implements a reddis based job queue with scheduler jobs and user filter
  * CI Redis Lib is required
  *
- * @package		Tuiteraction
  * @subpackage	Libraries
  * @category	Libraries
  * @author      Marcos Sanz Latorre <marcossanzlatorre@gmail.com>
