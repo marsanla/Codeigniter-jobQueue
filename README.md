@@ -26,7 +26,7 @@ Variables:
   * $method => Name of the method from controller (Default: index)
   * $params => Array of params (Default: null). For example: array('param1','param2','param3')
   * $description => Description of the task (Default: null). For example: UpdateUserProfile
-  * $belongTo ($user_id) => Id user from the job. Only works if $trackStatus is true (Default: null).
+  * $belongTo ($user_id) => Id user from the job (Default: null).
   * $stat => Jobs stats. For example: delayed, waiting, running, complete and failed
 
 ###Create new job
