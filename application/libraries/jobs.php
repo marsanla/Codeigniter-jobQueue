@@ -7,6 +7,7 @@ if (!defined('BASEPATH'))
  * Implements a reddis based job queue with scheduler jobs and user filter
  * CI Redis Lib is required
  *
+ * @package		Codeigniter
  * @subpackage	Libraries
  * @category	Libraries
  * @author      Marcos Sanz Latorre <marcossanzlatorre@gmail.com>
@@ -65,6 +66,7 @@ class Jobs {
 	public function __construct() {
 		$this -> _ci = &get_instance();
 		$this -> _ci -> load -> library('Redis');
+		$this -> _ci -> load -> library('mcurl');
 	}
 
 	/* ------------------------------------------------------------
@@ -239,7 +241,7 @@ class Jobs {
 	 * @param   array $data Data to remove
 	 * @return  bool 1 if ok, 0 if not
 	 */
-	public function removeJob($queue, $data) {
+	public function remove_job($queue, $data) {
 		return $this -> _ci -> lrem($this -> _queue . ':' . $queue . ' 0 ' . $data);
 		// TODO: fix this function
 
@@ -313,7 +315,7 @@ class Jobs {
 	 */
 	private function enqueue($queue, $data) {
 		// Add the queue if not exists
-		$this -> _ci -> redis -> sadd($this -> _queue, $queue);
+		$this -> _ci -> redis -> sadd($this -> _queue . ' ' . $queue);
 
 		// Push data to the queue
 		return $this -> _ci -> redis -> rpush($this -> _queue . ':' . $queue . ' ' . json_encode($data));
@@ -356,7 +358,7 @@ class Jobs {
 				$at = (int)$at;
 			}
 		}
-
+		
 		// Get elements
 		$items = $this -> _ci -> redis -> zrangebyscore($this -> _delayed_queue . ' -inf ' . $at . ' LIMIT 0 1');
 
@@ -482,7 +484,7 @@ class Jobs {
 		while (true) {
 
 			try {
-
+				
 				// Do loop while there are timestamp item in the queue
 				while (($timestamp = $this -> next_delayed_timestamp()) !== false) {
 
@@ -539,7 +541,7 @@ class Jobs {
 	 * @return  void
 	 */
 	public function worker($worker_name = 'worker', $queues, $interval = null) {
-
+		
 		// Check if queues exists
 		if ($queues === null) {
 			return false;
@@ -633,9 +635,15 @@ class Jobs {
 			$url = array($job['controller'], $job['method'], $params);
 			$url = implode('/', $url);
 
-			// TODO: execute with mcurl
-			echo 'EJECUTA LA TAREA: ' . $url . '</br>';
-			print_r($job);
+			// Execute job
+			$this -> _ci -> mcurl -> add_call('perform_job', 'post', site_url($url));
+			$exec_job = $this -> _ci -> mcurl -> execute();
+	
+			// Get data
+			if (isset($exec_job['perform_job']['error'])) {
+				// If there is any error trhow an exception
+				throw new Exception('Job executions had an error.');
+			}
 
 			// Decrement RUNNING stat
 			$this -> decr_stat($this -> _running_stat);
