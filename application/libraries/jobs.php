@@ -271,6 +271,42 @@ class Jobs {
 	}
 
 	/**
+	 * Delete all jobs tables
+	 *
+	 * @access  public
+	 * @return  array count if delete
+	 */
+	public function flush_jobs() {
+		$results = array();
+
+		// Get delayed
+		$keys_delayed = $this -> _ci -> redis -> keys('delayed:*');
+		$results = array_merge((array)$results, (array)$keys_delayed);
+
+		// Get queue
+		$keys_queue = $this -> _ci -> redis -> keys($this -> _queue . ':*');
+		$results = array_merge((array)$results, (array)$keys_queue);
+
+		// Get job
+		$keys_job = $this -> _ci -> redis -> keys('job:*');
+		$results = array_merge((array)$results, (array)$keys_job);
+
+		// Get stat
+		$keys_stat = $this -> _ci -> redis -> keys('stat:*');
+		$results = array_merge((array)$results, (array)$keys_stat);
+
+		// Get stat
+		$keys_worker = $this -> _ci -> redis -> keys('worker:*');
+		$results = array_merge((array)$results, (array)$keys_worker);
+
+		// Select keys to delete
+		$results = array_merge($results, array($this -> _queue, 'delayed', 'stat', 'job', 'worker'));
+		//return $results;
+
+		return $this -> _ci -> redis -> del(implode(' ', $results));
+	}
+
+	/**
 	 * Generate hash of all job properties to be saved in the scheduled queue.
 	 *
 	 * @access	private
@@ -358,7 +394,7 @@ class Jobs {
 				$at = (int)$at;
 			}
 		}
-		
+
 		// Get elements
 		$items = $this -> _ci -> redis -> zrangebyscore($this -> _delayed_queue . ' -inf ' . $at . ' LIMIT 0 1');
 
@@ -484,7 +520,7 @@ class Jobs {
 		while (true) {
 
 			try {
-				
+
 				// Do loop while there are timestamp item in the queue
 				while (($timestamp = $this -> next_delayed_timestamp()) !== false) {
 
@@ -541,7 +577,7 @@ class Jobs {
 	 * @return  void
 	 */
 	public function worker($worker_name = 'worker', $queues, $interval = null) {
-		
+
 		// Check if queues exists
 		if ($queues === null) {
 			return false;
@@ -638,7 +674,7 @@ class Jobs {
 			// Execute job
 			$this -> _ci -> mcurl -> add_call('perform_job', 'post', site_url($url));
 			$exec_job = $this -> _ci -> mcurl -> execute();
-	
+
 			// Get data
 			if (isset($exec_job['perform_job']['error'])) {
 				// If there is any error trhow an exception
