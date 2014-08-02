@@ -230,7 +230,7 @@ class Jobs {
 		$this -> clear($queue);
 
 		// Remove a queue
-		return $this -> _ci -> redis -> srem($this -> _queue . ' ' . $queue);
+		return $this -> _ci -> redis -> srem(array($this -> _queue, $queue));
 	}
 
 	/**
@@ -242,7 +242,7 @@ class Jobs {
 	 * @return  bool 1 if ok, 0 if not
 	 */
 	public function remove_job($queue, $data) {
-		return $this -> _ci -> lrem($this -> _queue . ':' . $queue . ' 0 ' . $data);
+		return $this -> _ci -> lrem(array($this -> _queue . ':' . $queue, ' 0 ', $data));
 		// TODO: fix this function
 
 		// Call to remove_status_job($id)
@@ -256,7 +256,7 @@ class Jobs {
 	 * @return  array Data from the top item
 	 */
 	public function peek($queue) {
-		$data = $this -> _ci -> redis -> lrange($this -> _queue . ':' . $queue . ' 0 0');
+		$data = $this -> _ci -> redis -> lrange(array($this -> _queue . ':' . $queue, ' 0 0'));
 		return json_decode($data[0]);
 	}
 
@@ -303,7 +303,7 @@ class Jobs {
 		$results = array_merge($results, array($this -> _queue, 'delayed', 'stat', 'job', 'worker'));
 		//return $results;
 
-		return $this -> _ci -> redis -> del(implode(' ', $results));
+		return $this -> _ci -> redis -> del($results);
 	}
 
 	/**
@@ -349,12 +349,15 @@ class Jobs {
 	 * @param	string $data Data from the job to enqueue
 	 * @return  bool
 	 */
+
 	private function enqueue($queue, $data) {
 		// Add the queue if not exists
-		$this -> _ci -> redis -> sadd($this -> _queue . ' ' . $queue);
+		// $this -> _ci -> redis -> sadd($this -> _queue . ' ' . $queue);
+		$this -> _ci -> redis -> sadd(array($this -> _queue, $queue));
 
 		// Push data to the queue
-		return $this -> _ci -> redis -> rpush($this -> _queue . ':' . $queue . ' ' . json_encode($data));
+		// return $this -> _ci -> redis -> rpush($this -> _queue . ':' . $queue . ' ' . json_encode($data));
+		return $this -> _ci -> redis -> rpush(array($this -> _queue . ':' . $queue,json_encode($data)));
 	}
 
 	/**
@@ -367,10 +370,10 @@ class Jobs {
 	 */
 	private function enqueue_delayed($timestamp, $data) {
 		// Add the queue if not exists
-		$this -> _ci -> redis -> zadd($this -> _delayed_queue . ' ' . $timestamp . ' ' . $timestamp);
+		$this -> _ci -> redis -> zadd(array($this -> _delayed_queue, $timestamp, $timestamp));
 
 		// Push data to the delayed queue
-		return $this -> _ci -> redis -> rpush($this -> _delayed_queue . ':' . $timestamp . ' ' . json_encode($data));
+		return $this -> _ci -> redis -> rpush(array($this -> _delayed_queue . ':' . $timestamp,json_encode($data)));
 	}
 
 	/**
@@ -396,7 +399,7 @@ class Jobs {
 		}
 
 		// Get elements
-		$items = $this -> _ci -> redis -> zrangebyscore($this -> _delayed_queue . ' -inf ' . $at . ' LIMIT 0 1');
+		$items = $this -> _ci -> redis -> zrangebyscore(array($this -> _delayed_queue, ' -inf ', $at, ' LIMIT 0 1'));
 
 		// Check if there are any item
 		if (!empty($items)) {
@@ -430,7 +433,7 @@ class Jobs {
 		}
 
 		// Pop first job from a queue
-		$data = $this -> _ci -> redis -> blpop($list_queues . ' ' . $this -> _interval_block);
+		$data = $this -> _ci -> redis -> blpop(array($list_queues, $this -> _interval_block));
 
 		// Check if exists
 		if (!$data) {
@@ -453,7 +456,7 @@ class Jobs {
 		$key = $this -> _delayed_queue . ':' . $timestamp;
 
 		// Pop first job from a queue
-		$data = $this -> _ci -> redis -> blpop($key . ' ' . $this -> _interval_block);
+		$data = $this -> _ci -> redis -> blpop(array($key, $this -> _interval_block));
 
 		// Clean up if the list from $timestamp is empty
 		$this -> clean_up_timestamp($key, $timestamp);
@@ -489,7 +492,7 @@ class Jobs {
 			$this -> _ci -> redis -> del($key);
 
 			// Delete timestamp queue
-			$this -> _ci -> redis -> zrem($this -> _delayed_queue . ' ' . $timestamp);
+			$this -> _ci -> redis -> zrem(array($this -> _delayed_queue ,$timestamp));
 		}
 	}
 
@@ -628,11 +631,14 @@ class Jobs {
 				// Decrement WAITING stat
 				$this -> decr_stat($this -> _waiting_stat);
 
+				$description = $job[1]['description'];
+				$queue = $job[1]['queue'];
+
 				// Log got message
-				log_message('debug', 'Worker <' . $worker_name . '>: Got a Job -> ' . $job[1]['description']);
+				log_message('debug', 'Worker <' . $worker_name . '>: Got a Job -> ' . $description  . ' on queue: ' . $queue);
 
 				// Set current job in the worker
-				$this -> set_worker_current_job($worker_name, $job[1]['queue'], $job[1]['description']);
+				$this -> set_worker_current_job($worker_name, $queue, $description);
 
 				// Perform the job
 				$perform = $this -> perform($job[1]);
@@ -645,7 +651,7 @@ class Jobs {
 		}
 
 		// Log finish worked
-		log_message('debug', 'Worker ' . $worker_name . ' finished.');
+		log_message('debug', 'Worker <' . $worker_name . '> finished.');
 
 	}
 
@@ -760,7 +766,7 @@ class Jobs {
 		$data = array('queue' => $queue, 'run_at' => time(), 'description' => $description);
 
 		// Set current job from the worker
-		return $this -> _ci -> redis -> set('worker:' . $worker_name . ' ' . json_encode($data));
+		return $this -> _ci -> redis -> set(array('worker:' . $worker_name,json_encode($data)));
 	}
 
 	/* ------------------------------------------------------------
@@ -826,7 +832,7 @@ class Jobs {
 
 		// Create a key to this job
 		$statusPacket = array('status' => self::STATUS_WAITING, 'queue' => $queue, 'updated' => time(), 'started' => time());
-		return $this -> _ci -> redis -> set('job:' . $id . $belongTo . ' ' . json_encode($statusPacket));
+		return $this -> _ci -> redis -> set(array('job:' . $id . $belongTo, json_encode($statusPacket)));
 	}
 
 	/**
@@ -849,11 +855,11 @@ class Jobs {
 			// Set status packet
 			$statusPacket = array('status' => $status, 'queue' => $value -> queue, 'updated' => time(), 'started' => $value -> started);
 
-			$this -> _ci -> redis -> set($key[0] . ' ' . json_encode($statusPacket));
+			$this -> _ci -> redis -> set(array($key[0], json_encode($statusPacket)));
 
 			// Expire the status for completed jobs after 24 hours
 			if (in_array($status, $this -> complete_statuses)) {
-				$this -> _ci -> redis -> expire($key[0] . ' 86400');
+				$this -> _ci -> redis -> expire(array($key[0], '86400'));
 			}
 
 			// Return true
@@ -925,7 +931,7 @@ class Jobs {
 	 * @return  bool 1 if ok, 0 if not
 	 */
 	private function incr_stat($stat, $by = 1) {
-		return (bool)$this -> _ci -> redis -> incrby('stat:' . $stat, $by);
+		return (bool)$this -> _ci -> redis -> incrby(array('stat:' . $stat, $by));
 	}
 
 	/**
@@ -936,7 +942,7 @@ class Jobs {
 	 * @return  bool 1 if ok, 0 if not
 	 */
 	private function decr_stat($stat, $by = 1) {
-		return (bool)$this -> _ci -> redis -> decrby('stat:' . $stat, $by);
+		return (bool)$this -> _ci -> redis -> decrby(array('stat:' . $stat, $by));
 	}
 
 }
